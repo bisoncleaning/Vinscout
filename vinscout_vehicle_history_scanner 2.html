@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VINScout — AI Vehicle History Scanner</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202b;background:#f4f6f8}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:960px;margin:auto;padding:24px 16px 56px}
+header{background:#14283f;color:white;border-radius:22px;padding:28px 24px;margin-bottom:18px}
+.kicker{font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#8fd4c4}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.05;margin:10px 0}
+.sub{color:#d7e0e9;max-width:680px;line-height:1.55}
+.panel{background:white;border:1px solid #e1e6eb;border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 5px 20px #10203008}
+label{display:block;font-weight:700;font-size:14px;margin:0 0 8px}
+input,button,textarea{font:inherit}input{width:100%;padding:14px;border:1px solid #cbd4dd;border-radius:10px;font-size:16px;text-transform:uppercase}
+button{border:0;border-radius:10px;padding:13px 16px;font-weight:750;cursor:pointer}
+.primary{background:#147d6f;color:white;width:100%;margin-top:12px}.secondary{background:#e8f0f4;color:#203449}
+.hint,.muted{font-size:13px;color:#667482;line-height:1.5}.status{margin-top:12px;font-size:14px;color:#465666}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.metric{padding:14px;background:#f7f9fb;border-radius:12px;border:1px solid #e8edf1}.metric b{display:block;font-size:12px;color:#687786;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}.metric span{font-size:16px;font-weight:750;overflow-wrap:anywhere}
+h2{font-size:20px;margin:0 0 14px}h3{font-size:15px;margin:0 0 7px}
+ul{padding-left:20px;line-height:1.65}.pill{display:inline-block;padding:5px 9px;border-radius:99px;font-size:12px;font-weight:800;background:#e9f5f1;color:#146c5e}
+.warn{background:#fff5e3;color:#805512}.error{background:#fdecea;color:#992e25}
+details{border-top:1px solid #e7ebef;padding:12px 0}summary{font-weight:700;cursor:pointer}
+textarea{width:100%;min-height:88px;border:1px solid #cbd4dd;border-radius:10px;padding:12px}
+footer{font-size:12px;color:#647281;line-height:1.6;padding:8px}
+.hidden{display:none}
+@media(min-width:650px){.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end}.row button{margin-top:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kicker">Free starter tool · Canada / US VINs</div>
+  <h1>VINScout</h1>
+  <div class="sub">A first-pass vehicle investigation scanner for used-car and auction buyers. Decode a VIN, check available recall records, and organize due-diligence checks before you bid.</div>
+</header>
+<noscript>
+  <section class="panel warn" style="border:2px solid #d89b36">
+    <h2>Open VINScout in a full browser</h2>
+    <p>This preview has JavaScript disabled, so the Scan button cannot run here. In the ChatGPT app, use the Share button or the file menu and choose <b>Open in Safari</b> (or save the HTML file to Files, then tap Share → Safari). If that option is unavailable, open this conversation in Safari and tap the scanner link there.</p>
+    <p>VINScout also needs an internet connection to contact the public VIN decoder.</p>
+  </section>
+</noscript>
+<section class="panel warn" id="browserHelp" style="display:none;border:2px solid #d89b36">
+  <h2>ChatGPT preview compatibility</h2>
+  <p>This page is running its script, but the ChatGPT in-app preview may block external API requests. If scanning fails, open the HTML file in Safari: tap Share / the file menu → <b>Open in Safari</b>. If you cannot choose Safari, save the file to the Files app, then open it from there in Safari. Keep internet access enabled.</p>
+  <button class="secondary" type="button" id="dismissHelp">Got it</button>
+</section>
+
+<section class="panel">
+  <h2>Scan a vehicle</h2>
+  <label for="vin">17-character VIN</label>
+  <div class="row">
+    <input id="vin" maxlength="17" placeholder="e.g. 1FTEW1EG6GFA25802" autocomplete="off" spellcheck="false">
+    <button class="primary" id="scan" type="button">Decode VIN & check recalls</button>
+  </div>
+  <p class="hint">Uses NHTSA's public VIN-decoding and recall APIs. Internet connection required. A valid-looking VIN does not prove the vehicle's history or legal status.</p>
+  <div class="status" id="status" role="status"></div>
+</section>
+
+<div id="results" class="hidden">
+  <section class="panel">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap">
+      <div><div class="pill">VIN decoded</div><h2 id="vehicleTitle" style="margin-top:10px">Vehicle</h2></div>
+      <button class="secondary" id="print" type="button">Print / Save PDF</button>
+    </div>
+    <div id="specs" class="grid"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Recall check</h2>
+    <div id="recallStatus" class="status">Not checked yet</div>
+    <div id="recalls"></div>
+    <p class="hint">Recall results may be unavailable or incomplete for some vehicles. Confirm open recalls with the manufacturer using the VIN.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Vehicle-history investigation checklist</h2>
+    <p class="muted">These checks are not completed automatically. Open each source and save evidence before treating a vehicle as verified.</p>
+    <div id="checklist"></div>
+  </section>
+
+  <section class="panel">
+    <h2>AI / buyer notes</h2>
+    <label for="notes">Paste an auction listing, inspection report, service records, or notes</label>
+    <textarea id="notes" placeholder="Paste listing text, mileage records, damage notes, auction condition details…"></textarea>
+    <button class="primary" id="analyze" type="button" style="margin-top:10px">Analyze notes for red flags</button>
+    <div id="analysis" style="margin-top:14px"></div>
+    <p class="hint">This local rule-based review highlights clues in the text; it is not a connected AI model and cannot verify claims independently.</p>
+  </section>
+</div>
+
+<section class="panel" id="damage-lien-checks">
+  <h2>Accident, damage & lien checks</h2>
+  <p class="hint">These checks use official or public sources. They do not automatically reveal every accident or lien; some require a paid search, a request to MPI, or checking the vehicle's previous provinces.</p>
+  <div class="grid">
+    <div class="metric"><b>1. Accident & insurance damage history</b><span>Request Manitoba vehicle-history information from MPI, which may include previous claims, total losses and vehicle damage.</span><p><a href="https://residents.gov.mb.ca/forms.html?d=details&amp;pub_id=5946" target="_blank" rel="noopener">Open MPI Vehicle History Search Form ↗</a></p></div>
+    <div class="metric"><b>2. Write-off / stolen status</b><span>MPI can confirm whether a vehicle was an Autopac write-off in Manitoba. This is not a complete Canada-wide accident search.</span><p><a href="https://www.mpi.mb.ca/protect-yourself-when-buying-and-selling-a-vehicle/" target="_blank" rel="noopener">MPI buyer guidance ↗</a></p></div>
+    <div class="metric"><b>3. Manitoba lien search</b><span>Search the Personal Property Registry by the vehicle's VIN/serial number. Fees may apply. Do not treat a skipped search as “no lien.”</span><p><a href="https://teranetmanitoba.ca/personal-property/" target="_blank" rel="noopener">Open Teranet Manitoba Personal Property Registry ↗</a></p></div>
+    <div class="metric"><b>4. Public damage / auction traces</b><span>Search the exact VIN for old auction pages, salvage listings, photos or ads. A blank result does not prove a clean history.</span><p><a id="vinDamageSearch" href="https://www.google.com/search?q=vehicle+VIN+damage+auction" target="_blank" rel="noopener">Search VIN for damage / auction ↗</a></p></div>
+  </div>
+  <p><strong>Important:</strong> VINScout cannot directly access private insurance databases or guarantee a nationwide lien result. For out-of-province vehicles, run the appropriate provincial lien searches and obtain a commercial history report if needed.</p>
+</section>
+
+<section class="panel">
+  <h2>What this tool can and cannot tell you</h2>
+  <div class="grid">
+    <div class="metric"><b>Can check</b><span>VIN specifications and available recalls</span></div>
+    <div class="metric"><b>Can help investigate</b><span>Damage clues, mileage inconsistencies, auction notes</span></div>
+    <div class="metric"><b>Not included for free</b><span>Complete CARFAX data, private insurance claims, guaranteed accident history</span></div>
+    <div class="metric"><b>Verify separately</b><span>Manitoba registration/branding, liens, stolen status, title and ownership</span></div>
+  </div>
+</section>
+<footer>VINScout is an independent prototype and is not affiliated with CARFAX, NHTSA, Transport Canada, Manitoba Public Insurance, or any vehicle manufacturer. No history report is guaranteed complete. Never rely on this tool alone for a purchase decision.</footer>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let currentVehicle = {};
+// In-app document previews often restrict external fetches. Explain the workaround up front.
+if (location.protocol === "file:" || /ChatGPT|WebView/i.test(navigator.userAgent)) {
+  $("browserHelp").style.display = "block";
+}
+$("dismissHelp").addEventListener("click", () => { $("browserHelp").style.display = "none"; });
+const clean = s => (s || "").trim();
+function metric(label,value){return `<div class="metric"><b>${label}</b><span>${escapeHtml(value || "Not reported")}</span></div>`}
+function escapeHtml(v){return String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function val(o,k){return clean(o?.[k]) && o[k] !== "0" && o[k] !== "Not Applicable" ? o[k] : ""}
+const sources = [
+ ["Transport Canada recalls","https://tc.canada.ca/en/road-transportation/defects-recalls-vehicles-tires-child-car-seats"],
+ ["NHTSA recalls","https://www.nhtsa.gov/recalls"],
+ ["Manitoba vehicle registration / status","https://www.mpi.mb.ca/vehicle-registration/"],
+ ["Canadian personal property / lien search info","https://www.canada.ca/en/financial-consumer-agency/services/loans/liens.html"],
+ ["CPIC stolen property search","https://www.cpic-cipc.ca/"],
+ ["Search public auction listings","https://www.google.com/search?q="],
+ ["Search previous ads by VIN","https://www.google.com/search?q="]
+];
+function buildChecklist(vin){
+ const q=encodeURIComponent('"'+vin+'"');
+ const damageLink=document.getElementById("vinDamageSearch");
+ if(damageLink) damageLink.href="https://www.google.com/search?q="+encodeURIComponent('"'+vin+'" damage OR accident OR collision OR salvage OR auction);
+ const rows = [
+  ["Search exact VIN on the public web", "https://www.google.com/search?q="+q],
+  ["Search VIN + auction / salvage", "https://www.google.com/search?q="+encodeURIComponent('"'+vin+'" auction OR salvage OR Copart OR IAA')],
+  ["Search VIN + damage / accident", "https://www.google.com/search?q="+encodeURIComponent('"'+vin+'" damage OR accident OR collision')],
+  ["Check NHTSA recalls", "https://www.nhtsa.gov/recalls"],
+  ["Check Transport Canada recalls", "https://tc.canada.ca/en/road-transportation/defects-recalls-vehicles-tires-child-car-seats"],
+  ["Review Manitoba registration / branding requirements", "https://www.mpi.mb.ca/vehicle-registration/"],
+  ["Ask about an official lien search", "https://www.canada.ca/en/financial-consumer-agency/services/loans/liens.html"],
+  ["Check Canadian Police Information Centre (stolen property)", "https://www.cpic-cipc.ca/"]
+ ];
+ $("checklist").innerHTML=rows.map((r,i)=>`<details><summary>${i+1}. ${escapeHtml(r[0])}</summary><p><a href="${r[1]}" target="_blank" rel="noopener">Open source ↗</a></p><label><input type="checkbox" style="width:auto;margin-right:7px"> I checked this source</label></details>`).join("");
+}
+async function scan(){
+ const vin=clean($("vin").value).toUpperCase();
+ $("vin").value=vin;
+ $("status").textContent="";
+ $("results").classList.add("hidden");
+ if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)){ $("status").innerHTML='<span class="pill error">Check VIN</span> Enter a 17-character VIN (excluding I, O and Q).';return; }
+ $("scan").disabled=true; $("scan").textContent="Scanning…";
+ $("status").textContent="Querying public VIN decoder…";
+ try{
+  const url="https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/"+encodeURIComponent(vin)+"?format=json";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  let resp;
+  try { resp = await fetch(url, {signal: controller.signal, mode: "cors"}); }
+  catch (err) {
+    if (err.name === "AbortError") throw new Error("The public VIN service took too long to respond. Try again in a moment");
+    throw new Error("The browser blocked or could not reach NHTSA. The ChatGPT preview may restrict API requests; open this file in Safari/Chrome and try again");
+  } finally { clearTimeout(timeoutId); }
+  if(!resp.ok) throw new Error("VIN decoder returned HTTP "+resp.status);
+  const json=await resp.json(); const v=json.Results?.[0];
+  if(!v) throw new Error("No decoding result returned.");
+  currentVehicle={vin,...v};
+  const title=[val(v,"ModelYear"),val(v,"Make"),val(v,"Model"),val(v,"Trim")].filter(Boolean).join(" ");
+  $("vehicleTitle").textContent=title || "Vehicle details returned";
+  $("specs").innerHTML=[
+   ["VIN",vin],["Year",val(v,"ModelYear")],["Make",val(v,"Make")],["Model",val(v,"Model")],["Trim",val(v,"Trim")],
+   ["Engine", [val(v,"DisplacementL")?v.DisplacementL+" L":"",val(v,"EngineCylinders")?v.EngineCylinders+" cylinders":"",val(v,"FuelTypePrimary")].filter(Boolean).join(" · ")],
+   ["Drive type",val(v,"DriveType")],["Body class",val(v,"BodyClass")],["Transmission",val(v,"TransmissionStyle")],
+   ["Plant / country", [val(v,"PlantCountry"),val(v,"PlantCity")].filter(Boolean).join(" · ")],["Vehicle type",val(v,"VehicleType")],["Decoder notes",val(v,"ErrorText")]
+  ].map(x=>metric(x[0],x[1])).join("");
+  $("results").classList.remove("hidden");
+  buildChecklist(vin);
+  $("status").innerHTML='<span class="pill">VIN decoded</span> Now checking recalls where the public API supports it.';
+  await checkRecalls(v);
+ }catch(e){
+  $("status").innerHTML='<span class="pill error">Could not complete scan</span><br>'+escapeHtml(e.message)+'.';
+  $("status").scrollIntoView({behavior:"smooth",block:"center"});
+ }finally{$("scan").disabled=false;$("scan").textContent="Decode VIN & check recalls";}
+}
+async function checkRecalls(v){
+ $("recallStatus").textContent="Trying public recall lookup…";
+ $("recalls").innerHTML="";
+ const year=val(v,"ModelYear"),make=val(v,"Make"),model=val(v,"Model");
+ if(!year||!make||!model){$("recallStatus").textContent="Insufficient decoded year/make/model to query recalls.";return}
+ try{
+  const url="https://api.nhtsa.gov/recalls/recallsByVehicle?make="+encodeURIComponent(make)+"&model="+encodeURIComponent(model)+"&modelYear="+encodeURIComponent(year);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  let r;
+  try { r = await fetch(url, {signal: controller.signal}); }
+  finally { clearTimeout(timeoutId); }
+  if(!r.ok) throw new Error("Recall API unavailable");
+  const data=await r.json();
+  const arr=data.results || data.Results || [];
+  if(!arr.length){$("recallStatus").innerHTML='<span class="pill warn">No results returned</span> This is not proof that the vehicle has no open recalls.';return}
+  $("recallStatus").innerHTML=`<span class="pill warn">${arr.length} matching recall record(s)</span> These are model/year matches, not confirmation of an open recall on this specific VIN.`;
+  $("recalls").innerHTML=arr.slice(0,30).map(x=>`<details><summary>${escapeHtml(x.NHTSACampaignNumber||x.campaignNumber||"Recall record")} — ${escapeHtml(x.Component||x.component||"Component not listed")}</summary><p>${escapeHtml(x.Summary||x.summary||x.Consequence||"No summary provided.")}</p><p class="muted">Remedy: ${escapeHtml(x.Remedy||x.remedy||"Check with manufacturer")}</p></details>`).join("");
+ }catch(e){$("recallStatus").innerHTML='<span class="pill warn">Automatic recall lookup unavailable</span> Use the official recall links below and verify directly with the manufacturer.';}
+}
+function analyzeNotes(){
+ const t=clean($("notes").value), low=t.toLowerCase();
+ if(!t){$("analysis").innerHTML='<p class="muted">Paste some listing or inspection text first.</p>';return}
+ const groups=[
+  ["Potential title / legal concerns",/salvage|rebuilt|irreparable|non-repairable|branded|lien|stolen|title missing|no title|parts only|bill of sale only/],
+  ["Potential damage / structural concerns",/accident|collision|frame|structural|airbag|flood|water damage|hail|fire|front end|rear end|side impact|unibody/],
+  ["Potential mechanical concerns",/engine knock|transmission|slipping|misfire|overheat|overheating|oil pressure|coolant leak|check engine|limp mode|does not start|won't start|not running|as-is|mechanical/],
+  ["Potential mileage concerns",/odometer|mileage|km\b|kilomet|miles|cluster replaced|not actual|exempt/],
+  ["Potential auction / disclosure language",/run and drive|starts|drives|stationary|tow|salvage auction|insurance loss|no keys|unknown condition|not tested|buyer beware/]
+ ];
+ const found=groups.filter(g=>g[1].test(low));
+ let html='<div class="metric"><b>Review result</b><span>'+(found.length?'Potential red flags found in text':'No keyword flags found')+'</span></div>';
+ if(found.length) html+='<ul>'+found.map(g=>'<li>'+escapeHtml(g[0])+'</li>').join('')+'</ul>';
+ else html+='<p class="muted">No obvious keyword triggers. That does not mean the vehicle is clean.</p>';
+ html+='<h3>Recommended next steps</h3><ul><li>Confirm every claim with dated documents or an independent inspection.</li><li>Compare odometer readings in chronological order.</li><li>Inspect underbody, airbags, frame rails, diagnostic codes and cold start where possible.</li><li>Check branding, liens and stolen status through the relevant official channels.</li></ul>';
+ $("analysis").innerHTML=html;
+}
+$("scan").addEventListener("click",scan);
+$("vin").addEventListener("keydown",e=>{if(e.key==="Enter")scan()});
+$("analyze").addEventListener("click",analyzeNotes);
+$("print").addEventListener("click",()=>window.print());
+</script>
+</body></html>
